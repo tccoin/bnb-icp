@@ -1,11 +1,16 @@
-#include "ceres/ceres.h"
-#include "glog/logging.h"
+#include <bits/stdc++.h>
+#include <ceres/ceres.h>
+#include <glog/logging.h>
+#include <pybind11/embed.h>
+#include <pybind11/stl.h>
 
 using ceres::AutoDiffCostFunction;
 using ceres::CostFunction;
 using ceres::Problem;
 using ceres::Solve;
 using ceres::Solver;
+namespace py = pybind11;
+using namespace pybind11::literals;
 
 // A templated cost functor that implements the residual r = 10 -
 // x. The method operator() is templated so that we can then use an
@@ -38,5 +43,22 @@ int main(int argc, char** argv) {
   Solve(options, &problem, &summary);
   std::cout << summary.BriefReport() << "\n";
   std::cout << "x : " << initial_x << " -> " << x << "\n";
+
+  // import plt
+  py::scoped_interpreter guard;
+  // auto axes3D = pybind11::module::import("mpl_toolkits.mplot3d").attr("Axes3D");
+  auto plt = py::module_::import("matplotlib.pyplot");
+  auto fig = plt.attr("figure")("figsize"_a = py::make_tuple(10, 8));
+  plt.attr("ion")();
+
+  // plot
+  std::vector<double> x_data = {1, 2, 3, 4, 5};
+  std::vector<double> y_data = {5, 4, 3, 2, 1};
+  auto ax = fig.attr("add_subplot")(1, 1, 1);
+  ax.attr("plot")(x_data, y_data, "linestyle"_a = "-", "linewidth"_a = "1", "markersize"_a = "5",
+                  "marker"_a = "o");
+  plt.attr("show")();
+  plt.attr("pause")(0);
+
   return 0;
 }
