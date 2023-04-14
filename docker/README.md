@@ -13,12 +13,12 @@ This docker file sets up the environment for [CURLY SLAM](https://github.com/UMi
     -  Docker on MacOS or Windows is not suggested because lack of GPU support. You may encounter opengl issues when using `rviz`.
 1. Clone this repository:
     ```bash
-    git clone git@github.com:UMich-CURLY/curly_slam.git
+    git clone git@github.com:tccoin/bnb-icp.git
     ```
 1. Build the Docker image:
     ```bash
     cd docker
-    docker build --build-arg USER=$USER --build-arg GID=$(id -g) --build-arg UID=$(id -u) --tag umcurly/bnb_icp .
+    docker build --build-arg USER=$USER --tag umcurly/bnb_icp .
     ```
     - See `build.log` for building details. The image may take ~20 minutes to build, so please grab a cup of coffee and relax.
     - If you encounter any problem during this step, please submit a new issue and paste your error message there. We will help you as soon as possible.
