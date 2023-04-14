@@ -18,13 +18,6 @@ if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   )
 endif()
 
-
-
-# ---- Add dependencies in local ----
-
-# find_package(Eigen3 REQUIRED)
-# find_package(Ceres REQUIRED)
-
 # ---- Add dependencies via CPM ----
 # see https://github.com/TheLartians/CPM.cmake for more info
 
