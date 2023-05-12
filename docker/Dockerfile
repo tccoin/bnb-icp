@@ -86,6 +86,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
 
+# RUN wget -O - https://apt.kitware.com/kitware-archive.sh | bash \
+#     && apt-get install --no-install-recommends -y cmake
+
+RUN pip install cmake
+
 # use current user
 RUN adduser --disabled-password --gecos '' $USER
 RUN adduser $USER sudo
@@ -109,12 +114,25 @@ WORKDIR /home/$USER/slam_lib/
 COPY scripts/debian_mkl.sh debian_mkl.sh
 RUN sudo bash debian_mkl.sh
 
-# RUN git clone https://gitlab.com/libeigen/eigen.git eigen/ -b 3.3.9
-# RUN cd eigen/ \
-#     && mkdir -p build \
-#     && cd build \
-#     && cmake .. \
-#     && make install -j6
+RUN git clone https://gitlab.com/libeigen/eigen.git eigen/ -b 3.4.0
+RUN cd eigen/ \
+    && mkdir -p build \
+    && cd build \
+    && cmake .. \
+    && sudo make install -j6
+
+RUN git clone https://github.com/ceres-solver/ceres-solver.git ceres-solver/ -b 2.1.0
+RUN cd ceres-solver/ \
+    && mkdir -p build \
+    && cd build \
+    && cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DEXPORT_BUILD_DIR=ON -DMINIGLOG=ON -DPROVIDE_UNINSTALL_TARGET=OFF \
+    && make -j6 && sudo make install -j6
+
+RUN git clone https://github.com/google/or-tools
+RUN cd or-tools \
+    && cmake -S . -B build -DBUILD_DEPS=ON \
+    && cmake --build build --config Release --target all -j6 -v \
+    && sudo cmake --build build --config Release --target install -j6 -v
 
 # RUN wget https://github.com/opencv/opencv/archive/4.5.5.zip -q -O opencv.zip \
 #     && unzip -q opencv.zip \
@@ -166,9 +184,3 @@ RUN sudo bash debian_mkl.sh
 #     && mv pcl-pcl-1.9.1 pcl-1.9.1  \
 #     && mkdir -p pcl-1.9.1/build
 
-# RUN git clone https://github.com/ceres-solver/ceres-solver.git ceres-solver/ \
-#     && cd ceres-solver/ \
-#     && mkdir -p build \
-#     && cd build \
-#     && cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DEXPORT_BUILD_DIR=ON \
-#     && make -j6 && make install
