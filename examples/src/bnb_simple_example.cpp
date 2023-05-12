@@ -1,64 +1,138 @@
 #include <bits/stdc++.h>
-#include <ceres/ceres.h>
-#include <glog/logging.h>
+#include <ortools/linear_solver/linear_solver.h>
 #include <pybind11/embed.h>
 #include <pybind11/stl.h>
 
-using ceres::AutoDiffCostFunction;
-using ceres::CostFunction;
-using ceres::Problem;
-using ceres::Solve;
-using ceres::Solver;
 namespace py = pybind11;
 using namespace pybind11::literals;
+using namespace operations_research;
 
-// A templated cost functor that implements the residual r = 10 -
-// x. The method operator() is templated so that we can then use an
-// automatic differentiation wrapper around it to generate its
-// derivatives.
+class Node {
+public:
+  std::vector<double> region;
+  std::vector<double> solution;
+  bool isFeasible = true;
+  int fixedVariable = 0;
+  double objective = 0;
+  Node(std::vector<double> region_) : region(region_) {
+    for (double x : region) {
+      if (x != -1) {
+        fixedVariable++;
+      }
+    }
+  }
 
-struct CostFunctor {
-  template <typename T> bool operator()(const T* const x, T* residual) const {
-    residual[0] = 10.0 - x[0];
-    return true;
+  void updateSolution(bool isFeasible) { this->isFeasible = isFeasible; }
+
+  void updateSolution(std::vector<double>& solution, double objective) {
+    this->objective = objective;
+    this->solution = solution;
+    for (double x : solution) {
+      if (x != 1 && x != 0) {
+        isFeasible = false;
+      }
+    }
+  }
+
+  void branch(std::queue<Node>& q) {
+    if (fixedVariable == 4) {
+      return;
+    }
+    std::vector<double> subregion1 = region;
+    std::vector<double> subregion2 = region;
+    subregion1[fixedVariable] = 0;
+    subregion2[fixedVariable] = 1;
+    q.push(Node(subregion1));
+    q.push(Node(subregion2));
   }
 };
 
+void solveLP(Node& node) {
+  std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
+  if (!solver) {
+    LOG(WARNING) << "SCIP solver unavailable.";
+    node.updateSolution(false);
+    return;
+  }
+  // Variables
+  const double infinity = solver->infinity();
+  std::vector<MPVariable*> variables;
+  for (int i = 0; i < node.region.size(); i++) {
+    double x = node.region[i];
+    if (x == -1) {
+      variables.push_back(solver->MakeNumVar(0, 1, "x" + std::to_string(i)));
+    } else {
+      variables.push_back(solver->MakeNumVar(x, x, "x" + std::to_string(i)));
+    }
+  }
+  // LOG(INFO) << "Number of variables = " << solver->NumVariables();
+
+  // Constraints
+  // 8*x1 + 5*x2 + 3*x3 + 2*x4 <= 10
+  MPConstraint* const c0 = solver->MakeRowConstraint(-infinity, 10.0);
+  c0->SetCoefficient(variables[0], 8);
+  c0->SetCoefficient(variables[1], 5);
+  c0->SetCoefficient(variables[2], 3);
+  c0->SetCoefficient(variables[3], 2);
+  // LOG(INFO) << "Number of constraints = " << solver->NumConstraints();
+
+  // Objective function
+  // 15*x1 + 12*x2 + 4*x3 + 2*x4.
+  MPObjective* const objective = solver->MutableObjective();
+  objective->SetCoefficient(variables[0], 15);
+  objective->SetCoefficient(variables[1], 12);
+  objective->SetCoefficient(variables[2], 4);
+  objective->SetCoefficient(variables[3], 2);
+  objective->SetMaximization();
+
+  // Solve
+  const MPSolver::ResultStatus result_status = solver->Solve();
+  // Check that the problem has an optimal solution.
+  if (result_status != MPSolver::OPTIMAL) {
+    // LOG(INFO) << "The problem does not have an optimal solution!";
+    node.updateSolution(false);
+    return;
+  }
+
+  // Solution
+  LOG(INFO) << "Solution:";
+  std::vector<double> solution;
+  for (int i = 0; i < variables.size(); i++) {
+    solution.push_back(variables[i]->solution_value());
+    LOG(INFO) << variables[i]->name() << " = " << variables[i]->solution_value();
+  }
+  node.updateSolution(solution, objective->Value());
+}
+
 int main(int argc, char** argv) {
-  google::InitGoogleLogging(argv[0]);
-  // The variable to solve for with its initial value. It will be
-  // mutated in place by the solver.
-  double x = 0.5;
-  const double initial_x = x;
-  // Build the problem.
-  Problem problem;
-  // Set up the only cost function (also known as residual). This uses
-  // auto-differentiation to obtain the derivative (jacobian).
-  CostFunction* cost_function = new AutoDiffCostFunction<CostFunctor, 1, 1>(new CostFunctor);
-  problem.AddResidualBlock(cost_function, nullptr, &x);
-  // Run the solver!
-  Solver::Options options;
-  options.minimizer_progress_to_stdout = true;
-  Solver::Summary summary;
-  Solve(options, &problem, &summary);
-  std::cout << summary.BriefReport() << "\n";
-  std::cout << "x : " << initial_x << " -> " << x << "\n";
+  std::queue<Node> q;
+  Node optimal(std::vector<double>{-1, -1, -1, -1});
+  q.push(optimal);
 
-  // import plt
-  py::scoped_interpreter guard;
-  // auto axes3D = pybind11::module::import("mpl_toolkits.mplot3d").attr("Axes3D");
-  auto plt = py::module_::import("matplotlib.pyplot");
-  auto fig = plt.attr("figure")("figsize"_a = py::make_tuple(10, 8));
-  plt.attr("ion")();
+  while (!q.empty()) {
+    Node node = q.front();
+    solveLP(node);
+    LOG(INFO) << "Current node objective: " << node.objective
+              << ", Optimal objective: " << optimal.objective;
+    if (node.objective >= optimal.objective) {
+      if (node.isFeasible) {
+        optimal = node;
+        LOG(INFO) << "Updated optimal solution" << std::endl;
+      } else {
+        node.branch(q);
+        LOG(INFO) << "Branching" << std::endl;
+      }
+    } else {
+      LOG(INFO) << "Pruned" << std::endl;
+    }
+    q.pop();
+  }
 
-  // plot
-  std::vector<double> x_data = {1, 2, 3, 4, 5};
-  std::vector<double> y_data = {5, 4, 3, 2, 1};
-  auto ax = fig.attr("add_subplot")(1, 1, 1);
-  ax.attr("plot")(x_data, y_data, "linestyle"_a = "-", "linewidth"_a = "1", "markersize"_a = "5",
-                  "marker"_a = "o");
-  plt.attr("show")();
-  plt.attr("pause")(0);
+  LOG(INFO) << "Optimal solution: ";
+  for (double x : optimal.solution) {
+    LOG(INFO) << x << " ";
+  }
+  LOG(INFO) << "Optimal objective: " << optimal.objective;
 
   return 0;
 }

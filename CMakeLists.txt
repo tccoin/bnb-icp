@@ -40,7 +40,7 @@ CPMAddPackage(
   OPTIONS "FMT_INSTALL YES" # create an installable target
 )
 
-CPMAddPackage(
+CPMFindPackage(
   NAME Eigen3
   VERSION 3.4.0
   URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
@@ -52,17 +52,6 @@ if(Eigen3_ADDED)
   target_include_directories(Eigen3::Eigen INTERFACE "${Eigen3_SOURCE_DIR}")
 endif()
 
-CPMAddPackage(
-  NAME Ceres
-  GITHUB_REPOSITORY ceres-solver/ceres-solver
-  GIT_TAG 2.1.0
-  OPTIONS
-    "BUILD_TESTING OFF"
-    "BUILD_EXAMPLES OFF"
-    "MINIGLOG ON"
-    "PROVIDE_UNINSTALL_TARGET OFF"
-    "EXPORT_BUILD_DIR ON"
-)
 
 # ---- Add source files ----
 
